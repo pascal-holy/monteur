@@ -67,6 +67,21 @@ def extract_phones_from_detail_page(soup, listing_url, conn):
     phones_found = 0
     phones_data = []
 
+    listing_title = ''
+    h1 = soup.find('h1')
+    if h1:
+        listing_title = h1.get_text(strip=True)
+    if not listing_title:
+        scripts = soup.find_all('script', type='application/ld+json')
+        for script in scripts:
+            try:
+                data = json.loads(script.string)
+                if isinstance(data, dict) and data.get('@type') == 'LodgingBusiness':
+                    listing_title = data.get('name', '')
+                    break
+            except:
+                pass
+
     tel_links = soup.find_all('a', href=re.compile(r'^tel:'))
     for link in tel_links:
         href = link.get('href', '')
@@ -94,9 +109,9 @@ def extract_phones_from_detail_page(soup, listing_url, conn):
     for phone, ptype in phones_data:
         conn.execute(
             """INSERT INTO phone_numbers
-               (phone_number, phone_type, listing_url)
-               VALUES (?, ?, ?)""",
-            (phone, ptype, listing_url)
+               (phone_number, phone_type, listing_url, listing_title)
+               VALUES (?, ?, ?, ?)""",
+            (phone, ptype, listing_url, listing_title)
         )
         phones_found += 1
 
