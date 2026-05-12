@@ -1,0 +1,13 @@
+[Unit]
+Description=Monteurzimmer Flask API
+After=network.target
+
+[Service]
+User=raspberry
+WorkingDirectory=/home/raspberry/monteur
+ExecStart=/home/raspberry/monteur/.venv/bin/python api.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

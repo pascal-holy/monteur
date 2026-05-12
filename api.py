@@ -36,7 +36,7 @@ def get_phones_by_zip(zip_code):
 
     base_lat, base_lon = coord_row["lat"], coord_row["lon"]
 
-    rows = conn.execute("""SELECT phone_number, phone_type, listing_title, city, zip_code
+    rows = conn.execute("""SELECT phone_number, phone_type, listing_title, listing_url, city, zip_code
                            FROM phone_numbers WHERE zip_code != ''""").fetchall()
 
     results = []
@@ -57,4 +57,4 @@ def get_phones_by_zip(zip_code):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    app.run(host='0.0.0.0', debug=False, port=5001)
