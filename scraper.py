@@ -247,6 +247,10 @@ def main():
                         listing_soup = get_soup(listing_url, session)
                         zip_code, city_name = extract_zip_and_city(listing_soup)
 
+                        if city_name and city['name'].lower() not in city_name.lower() and city_name.lower() not in city['name'].lower():
+                            logger.debug(f"Skipping {listing_url} - city '{city_name}' doesn't match '{city['name']}'")
+                            continue
+
                         p = extract_phones_from_detail_page(listing_soup, listing_url, conn)
 
                         if p > 0 and (zip_code or city_name):
