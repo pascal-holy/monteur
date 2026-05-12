@@ -198,6 +198,8 @@ def get_german_cities(session):
 def get_listing_urls_from_page(soup, base_url):
     urls = []
     for link in soup.find_all('a', href=True):
+        if link.find_parent(class_='extended-headline'):
+            break
         href = link.get('href', '')
         if any(p in href for p in ['/unterkuenfte/', '/wohnung/', '/haus/', '/gaestezimmer/']):
             if '/stadtteil/' not in href:
