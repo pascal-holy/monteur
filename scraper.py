@@ -33,6 +33,8 @@ HEADERS = {
 }
 
 DB_PATH = "monteurzimmer_phones.db"
+CITIES_CACHE = "cities_cache.json"
+CHECKPOINT_FILE = "scrape_checkpoint.json"
 
 
 def init_db():
@@ -156,7 +158,19 @@ def extract_zip_and_city(soup):
     return zip_code, city
 
 
-def get_german_cities(session):
+def get_german_cities(session, use_cache=True):
+    cache_file = CITIES_CACHE
+
+    if use_cache:
+        try:
+            with open(cache_file, 'r') as f:
+                cached = json.load(f)
+                if cached and len(cached) > 100:
+                    logger.info(f"Loaded {len(cached)} cities from cache")
+                    return cached
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+
     logger.info("Fetching German city list from all alphabet pages...")
     all_cities = []
     alphabet_pages = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l',
@@ -191,6 +205,13 @@ def get_german_cities(session):
             seen.add(c['url'])
             unique_cities.append(c)
 
+    try:
+        with open(cache_file, 'w') as f:
+            json.dump(unique_cities, f)
+        logger.info(f"Cached {len(unique_cities)} cities to {cache_file}")
+    except Exception as e:
+        logger.warning(f"Failed to cache cities: {e}")
+
     logger.info(f"Found {len(unique_cities)} unique German cities/regions")
     return unique_cities
 
@@ -209,9 +230,37 @@ def get_listing_urls_from_page(soup, base_url):
     return urls
 
 
+def load_checkpoint():
+    try:
+        with open(CHECKPOINT_FILE, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def save_checkpoint(city_index, page, listing_index=0):
+    try:
+        with open(CHECKPOINT_FILE, 'w') as f:
+            json.dump({
+                'city_index': city_index,
+                'page': page,
+                'listing_index': listing_index
+            }, f)
+    except Exception as e:
+        logger.warning(f"Failed to save checkpoint: {e}")
+
+
 def main():
     session = requests.Session()
     conn = init_db()
+
+    checkpoint = load_checkpoint()
+    if checkpoint:
+        logger.info(f"Resuming from checkpoint: city #{checkpoint['city_index']}, page {checkpoint['page']}")
+
+    cities = get_german_cities(session)
+
+    start_city_index = checkpoint['city_index'] if checkpoint else 0
 
     stats = {
         'cities_processed': 0,
@@ -220,15 +269,22 @@ def main():
         'phones_found': 0
     }
 
-    cities = get_german_cities(session)
+    for city_index, city in enumerate(cities):
+        if city_index < start_city_index:
+            continue
 
-    for city in cities:
         logger.info(f"Processing city: {city['name']} ({city['url']})")
         page = 1
         city_has_listings = True
         city_phones = 0
 
+        start_page = checkpoint['page'] if checkpoint and city_index == start_city_index else 1
+
         while city_has_listings:
+            if page < start_page:
+                page += 1
+                continue
+
             if page == 1:
                 url = city['url']
             else:
@@ -242,7 +298,12 @@ def main():
                     city_has_listings = False
                     break
 
-                for listing_url in listing_urls:
+                start_listing_index = checkpoint['listing_index'] if checkpoint and city_index == start_city_index and page == start_page else 0
+
+                for listing_index, listing_url in enumerate(listing_urls):
+                    if listing_index < start_listing_index:
+                        continue
+
                     try:
                         listing_soup = get_soup(listing_url, session)
                         zip_code, city_name = extract_zip_and_city(listing_soup)
@@ -274,6 +335,7 @@ def main():
 
                     time.sleep(DELAY)
 
+                save_checkpoint(city_index, page + 1, 0)
                 stats['pages_processed'] += 1
                 page += 1
                 time.sleep(DELAY)
